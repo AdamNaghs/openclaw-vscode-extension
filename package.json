@@ -88,6 +88,10 @@
       }
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AdamNaghs/openclaw-vscode-extension.git"
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
