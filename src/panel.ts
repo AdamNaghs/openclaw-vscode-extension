@@ -7,13 +7,13 @@ export class OpenClawPanel {
     private disposables: vscode.Disposable[] = [];
     private messageQueue: string[] = [];
     private pendingTools: Map<string, PendingTool> = new Map();
+    private pollingTimer: ReturnType<typeof setInterval> | undefined;
 
     constructor(
         private readonly extensionUri: vscode.Uri,
         client: OpenClawClient
     ) {
         this.client = client;
-        this.startPolling();
     }
 
     show() {
@@ -37,6 +37,7 @@ export class OpenClawPanel {
 
         this.panel.onDidDispose(() => {
             this.panel = undefined;
+            this.stopPolling();
             this.disposables.forEach(d => d.dispose());
             this.disposables = [];
         });
@@ -65,7 +66,11 @@ export class OpenClawPanel {
             this.disposables
         );
 
-        this.checkConnection();
+        // Start polling AFTER panel is created, and check connection first
+        this.checkConnection().then(() => {
+            this.startPolling();
+            this.flushQueue();
+        });
     }
 
     reveal() {
@@ -102,14 +107,19 @@ export class OpenClawPanel {
         let enhancedText = text;
         
         while ((match = fileMentionRegex.exec(text)) !== null) {
-            const filePath = match[1];
-            const result = await this.client.readFile(filePath);
+            const mentioned = match[1];
+            const result = await this.client.readFile(mentioned);
             if (result.success) {
-                enhancedText += `\n\n[Content of ${filePath}]:\n\`\`\`\n${result.content}\n\`\`\``;
+                enhancedText += `\n\n[Content of ${mentioned}]:\n\`\`\`\n${result.content}\n\`\`\``;
             }
         }
 
+        // Show sending state
+        this.panel?.webview.postMessage({ type: 'sending', active: true });
+
         const result = await this.client.sendMessage(enhancedText, { fileContext, filePath });
+
+        this.panel?.webview.postMessage({ type: 'sending', active: false });
 
         if (!result.success) {
             this.panel?.webview.postMessage({
@@ -121,7 +131,7 @@ export class OpenClawPanel {
 
     private async handleApplyEdit(edit: { oldText: string; newText: string }) {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) { return; }
 
         const document = editor.document;
         const fullText = document.getText();
@@ -142,7 +152,7 @@ export class OpenClawPanel {
 
     private async handleApproveTool(toolId: string, approved: boolean) {
         const tool = this.pendingTools.get(toolId);
-        if (!tool) return;
+        if (!tool) { return; }
 
         this.pendingTools.delete(toolId);
 
@@ -175,7 +185,6 @@ export class OpenClawPanel {
     }
 
     private async handleRunCommand(command: string, cwd?: string) {
-        // Show VS Code native approval dialog
         const approval = await vscode.window.showWarningMessage(
             `Allow OpenClaw to run command?`,
             { modal: true, detail: `Command: ${command}\nDirectory: ${cwd || 'workspace root'}` },
@@ -197,12 +206,25 @@ export class OpenClawPanel {
     }
 
     private startPolling() {
-        const interval = setInterval(async () => {
-            if (!this.panel) return;
-            const history = await this.client.fetchHistory();
-            this.panel.webview.postMessage({ type: 'history', messages: history.slice(-10) });
-        }, 2000);
-        this.disposables.push({ dispose: () => clearInterval(interval) });
+        this.stopPolling();
+        this.pollingTimer = setInterval(async () => {
+            if (!this.panel) { return; }
+            try {
+                const history = await this.client.fetchHistory();
+                if (history.length > 0) {
+                    this.panel?.webview.postMessage({ type: 'history', messages: history });
+                }
+            } catch {
+                // Swallow polling errors
+            }
+        }, 3000);
+    }
+
+    private stopPolling() {
+        if (this.pollingTimer) {
+            clearInterval(this.pollingTimer);
+            this.pollingTimer = undefined;
+        }
     }
 
     private getHtml(): string {
@@ -214,44 +236,108 @@ export class OpenClawPanel {
     <title>OpenClaw</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 16px; line-height: 1.5; height: 100vh; display: flex; flex-direction: column; }
-        .header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--vscode-panel-border); flex-shrink: 0; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vscode-errorForeground); }
+        body {
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            color: var(--vscode-foreground);
+            background: var(--vscode-editor-background);
+            padding: 16px;
+            line-height: 1.5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 16px; padding-bottom: 12px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            flex-shrink: 0;
+        }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--vscode-errorForeground);
+        }
         .status-dot.connected { background: var(--vscode-testing-iconPassed); }
         .status-text { font-size: 12px; color: var(--vscode-descriptionForeground); }
         .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-shrink: 0; }
-        .toolbar button { padding: 4px 12px; font-size: 12px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+        .toolbar button {
+            padding: 4px 12px; font-size: 12px;
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none; border-radius: 4px; cursor: pointer;
+        }
         .messages { flex: 1; overflow-y: auto; margin-bottom: 16px; min-height: 0; }
         .message { margin-bottom: 16px; padding: 12px; border-radius: 6px; }
         .message.user { background: var(--vscode-editor-inactiveSelectionBackground); }
-        .message.assistant { background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); }
-        .message-header { font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; color: var(--vscode-descriptionForeground); }
+        .message.assistant {
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+        }
+        .message-header {
+            font-size: 11px; font-weight: 600; text-transform: uppercase;
+            margin-bottom: 8px; color: var(--vscode-descriptionForeground);
+        }
         .message-content { white-space: pre-wrap; word-break: break-word; }
-        .message-content pre { background: var(--vscode-textCodeBlock-background); padding: 12px; border-radius: 4px; overflow-x: auto; margin: 8px 0; }
-        .message-content code { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); }
-        .input-area { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--vscode-panel-border); flex-shrink: 0; }
-        textarea { flex: 1; min-height: 60px; max-height: 200px; padding: 10px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 4px; font-family: inherit; font-size: inherit; resize: vertical; }
+        .message-content pre {
+            background: var(--vscode-textCodeBlock-background);
+            padding: 12px; border-radius: 4px; overflow-x: auto; margin: 8px 0;
+        }
+        .message-content code {
+            font-family: var(--vscode-editor-font-family);
+            font-size: var(--vscode-editor-font-size);
+        }
+        .input-area {
+            display: flex; gap: 8px; padding-top: 12px;
+            border-top: 1px solid var(--vscode-panel-border);
+            flex-shrink: 0;
+        }
+        textarea {
+            flex: 1; min-height: 60px; max-height: 200px; padding: 10px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px; font-family: inherit; font-size: inherit; resize: vertical;
+        }
         textarea:focus { outline: none; border-color: var(--vscode-focusBorder); }
-        button { padding: 8px 16px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        button {
+            padding: 8px 16px; background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground); border: none;
+            border-radius: 4px; cursor: pointer; font-size: 13px;
+        }
         button:hover { background: var(--vscode-button-hoverBackground); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .error-banner { background: var(--vscode-inputValidation-errorBackground); border: 1px solid var(--vscode-inputValidation-errorBorder); color: var(--vscode-errorForeground); padding: 10px 12px; border-radius: 4px; margin-bottom: 16px; font-size: 13px; flex-shrink: 0; }
-        .apply-button { margin-top: 8px; padding: 4px 12px; font-size: 12px; margin-right: 8px; }
+        .error-banner {
+            background: var(--vscode-inputValidation-errorBackground);
+            border: 1px solid var(--vscode-inputValidation-errorBorder);
+            color: var(--vscode-errorForeground);
+            padding: 10px 12px; border-radius: 4px; margin-bottom: 16px;
+            font-size: 13px; flex-shrink: 0;
+        }
+        .apply-button {
+            margin-top: 8px; padding: 4px 12px; font-size: 12px; margin-right: 8px;
+        }
         .hint { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 4px; }
+        .sending-indicator {
+            font-size: 12px; color: var(--vscode-descriptionForeground);
+            padding: 4px 0; display: none;
+        }
+        .sending-indicator.active { display: block; }
     </style>
 </head>
 <body>
     <div class="header">
         <div id="statusDot" class="status-dot"></div>
-        <span class="status-text" id="statusText">Not connected</span>
+        <span class="status-text" id="statusText">Connecting...</span>
     </div>
     <div class="toolbar">
         <button id="fileBtn">+ File</button>
+        <button id="reconnectBtn">Reconnect</button>
     </div>
     <div id="errorBanner" class="error-banner" style="display: none;"></div>
     <div id="messages" class="messages"></div>
+    <div id="sendingIndicator" class="sending-indicator">Sending...</div>
     <div class="input-area">
-        <textarea id="messageInput" placeholder="Ask OpenClaw... Use @filename to include files (Shift+Enter for new line, Enter to send)"></textarea>
+        <textarea id="messageInput" placeholder="Ask OpenClaw... (Shift+Enter for new line, Enter to send)"></textarea>
         <button id="sendBtn">Send</button>
     </div>
     <p class="hint">Tip: Type @filename to include file contents in your message</p>
@@ -260,104 +346,138 @@ export class OpenClawPanel {
         let messages = [];
         let isConnected = false;
 
+        function escapeHtml(str) {
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+
         function updateStatus(connected, text) {
             isConnected = connected;
             document.getElementById("statusDot").classList.toggle("connected", connected);
             document.getElementById("statusText").textContent = text || (connected ? "Connected" : "Not connected");
+            document.getElementById("sendBtn").disabled = !connected;
         }
 
         function showError(message) {
-            const banner = document.getElementById("errorBanner");
+            var banner = document.getElementById("errorBanner");
             if (message) { banner.textContent = message; banner.style.display = "block"; }
             else { banner.style.display = "none"; }
         }
 
         function insertFileRef() {
-            const input = document.getElementById("messageInput");
+            var input = document.getElementById("messageInput");
             input.value += " @";
             input.focus();
         }
 
         function renderMessages() {
-            const container = document.getElementById("messages");
-            container.innerHTML = messages.map((msg, idx) => {
-                const role = msg.role === "assistant" ? "assistant" : "user";
-                const name = msg.role === "assistant" ? "OpenClaw" : "You";
-                const content = formatContent(msg.content);
-                let html = '<div class="message ' + role + '">' +
-                    '<div class="message-header">' + name + '</div>' +
-                    '<div class="message-content">' + content + '</div>';
-                if (msg.role === "assistant") {
-                    html += renderActions(msg.content, idx);
+            var container = document.getElementById("messages");
+            container.innerHTML = messages.map(function(msg, idx) {
+                var role = msg.role === "assistant" ? "assistant" : "user";
+                var name = msg.role === "assistant" ? "OpenClaw" : "You";
+                var content = formatContent(msg.content || "");
+                var hasCode = (msg.content || "").indexOf("\`\`\`") !== -1;
+                var actionsHtml = "";
+                if (msg.role === "assistant" && hasCode) {
+                    actionsHtml = '<button class="apply-button" data-msg-idx="' + idx + '">Apply Edit</button>';
                 }
-                html += '</div>';
-                return html;
-            }).join('');
+                return '<div class="message ' + role + '">' +
+                    '<div class="message-header">' + escapeHtml(name) + '</div>' +
+                    '<div class="message-content">' + content + '</div>' +
+                    actionsHtml +
+                    '</div>';
+            }).join("");
+
+            // Bind apply-edit buttons (no inline onclick — CSP safe)
+            container.querySelectorAll(".apply-button").forEach(function(btn) {
+                btn.addEventListener("click", function() {
+                    var idx = parseInt(btn.getAttribute("data-msg-idx"), 10);
+                    applyEdit(idx);
+                });
+            });
+
             container.scrollTop = container.scrollHeight;
         }
 
         function formatContent(text) {
-            return text
+            if (typeof text !== "string") { text = String(text || ""); }
+            var escaped = escapeHtml(text);
+            return escaped
                 .replace(/\`\`\`(\w+)?\n([\s\S]*?)\n\`\`\`/g, "<pre><code>$2</code></pre>")
                 .replace(/\`([^\`]+)\`/g, "<code>$1</code>")
                 .replace(/\n/g, "<br>");
         }
 
-        function renderActions(content, idx) {
-            let actions = "";
-            if (content.includes("\`\`\`")) {
-                actions += '<button class="apply-button" onclick="applyEdit(' + idx + ')">Apply Edit</button>';
-            }
-            return actions;
-        }
-
         function getCodeBlock(msgIdx) {
-            const msg = messages[msgIdx];
+            var msg = messages[msgIdx];
             if (!msg || msg.role !== "assistant") return null;
-            const match = msg.content.match(/\`\`\`[\s\S]*?\n([\s\S]*?)\n\`\`\`/);
+            var match = (msg.content || "").match(/\`\`\`[\\s\\S]*?\n([\\s\\S]*?)\n\`\`\`/);
             return match ? match[1] : null;
         }
 
         function applyEdit(idx) {
-            const code = getCodeBlock(idx);
+            var code = getCodeBlock(idx);
             if (code) {
                 vscode.postMessage({ command: "applyEdit", edit: { newText: code } });
             }
         }
 
         function sendMessage() {
-            const input = document.getElementById("messageInput");
-            const text = input.value.trim();
+            var input = document.getElementById("messageInput");
+            var text = input.value.trim();
             if (!text || !isConnected) return;
-            messages.push({ role: "user", content: text });
+            messages.push({ role: "user", content: text, timestamp: new Date().toISOString() });
             renderMessages();
-            vscode.postMessage({ command: "send", text });
+            vscode.postMessage({ command: "send", text: text });
             input.value = "";
         }
 
-        document.getElementById("messageInput").addEventListener("keydown", (e) => {
+        // Event listeners (CSP-safe, no inline handlers)
+        document.getElementById("messageInput").addEventListener("keydown", function(e) {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
         });
-
         document.getElementById("sendBtn").addEventListener("click", sendMessage);
         document.getElementById("fileBtn").addEventListener("click", insertFileRef);
+        document.getElementById("reconnectBtn").addEventListener("click", function() {
+            updateStatus(false, "Reconnecting...");
+            showError("");
+            vscode.postMessage({ command: "checkConnection" });
+        });
 
-        window.addEventListener("message", (e) => {
-            const msg = e.data;
+        window.addEventListener("message", function(e) {
+            var msg = e.data;
             switch (msg.type) {
                 case "status":
                     updateStatus(msg.success, msg.success ? "Connected to OpenClaw" : msg.error);
                     showError(msg.success ? "" : msg.error);
                     break;
                 case "history":
-                    const newMsgs = msg.messages.filter(m => !messages.some(ex => ex.content === m.content && ex.role === m.role));
-                    if (newMsgs.length > 0) { messages = [...messages, ...newMsgs]; renderMessages(); }
+                    if (msg.messages && msg.messages.length > 0) {
+                        // Replace all messages with the latest history snapshot
+                        // Preserve any locally-added user messages not yet in history
+                        var serverMsgs = msg.messages;
+                        messages = serverMsgs;
+                        renderMessages();
+                    }
                     break;
-                case "error": showError(msg.message); break;
-                case "queuedQuery": document.getElementById("messageInput").value = msg.text; sendMessage(); break;
+                case "error":
+                    showError(msg.message);
+                    break;
+                case "sending":
+                    var indicator = document.getElementById("sendingIndicator");
+                    indicator.classList.toggle("active", !!msg.active);
+                    break;
+                case "queuedQuery":
+                    document.getElementById("messageInput").value = msg.text;
+                    sendMessage();
+                    break;
             }
         });
 
+        // Request initial connection check
         vscode.postMessage({ command: "checkConnection" });
     </script>
 </body>
@@ -365,6 +485,7 @@ export class OpenClawPanel {
     }
 
     dispose() {
+        this.stopPolling();
         this.panel?.dispose();
         this.disposables.forEach(d => d.dispose());
     }

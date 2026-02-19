@@ -82,8 +82,8 @@
         },
         "openclaw.sessionKey": {
           "type": "string",
-          "default": "main:main",
-          "description": "Session key to connect to (default: main:main)"
+          "default": "agent:main:main",
+          "description": "Session key to connect to (default: agent:main:main)"
         }
       }
     }
