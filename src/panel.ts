@@ -406,7 +406,7 @@ export class OpenClawPanel {
             if (typeof text !== "string") { text = String(text || ""); }
             var escaped = escapeHtml(text);
             var bt = String.fromCharCode(96);
-            // Replace fenced code blocks (triple-backtick) - format: ```lang\ncode\n```
+            // Replace fenced code blocks (triple backtick)
             var triple = bt + bt + bt;
             while (true) {
                 var start = escaped.indexOf(triple);
@@ -421,7 +421,7 @@ export class OpenClawPanel {
                 }
                 escaped = escaped.substring(0, start) + "<pre><code>" + code + "</code></pre>" + escaped.substring(end + 3);
             }
-            // Replace inline code (single-backtick) - format: `code`
+            // Replace inline code (single backtick)
             while (true) {
                 var start = escaped.indexOf(bt);
                 if (start === -1) break;
