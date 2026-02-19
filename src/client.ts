@@ -210,7 +210,7 @@ export class OpenClawClient {
     private execCliSend(message: string): Promise<string> {
         return new Promise((resolve, reject) => {
             const escaped = message.replace(/'/g, "'\\''");
-            const cmd = `openclaw agent -m '${escaped}' --session-key '${this.sessionKey}' --timeout 0`;
+            const cmd = `openclaw agent -m '${escaped}' --session-id '${this.sessionKey}' --timeout 0`;
             execCb(cmd, { timeout: 15000 }, (err, stdout, stderr) => {
                 if (err) {
                     // Check if openclaw CLI is not found
