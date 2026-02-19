@@ -182,12 +182,17 @@ export class OpenClawClient {
         });
 
         if (!result.ok || !result.result) {
+            console.log('[OpenClaw] fetchHistory failed:', result.error || 'No result');
             return [];
         }
+
+        // Debug: log what we got
+        console.log('[OpenClaw] fetchHistory result:', JSON.stringify(result.result).slice(0, 500));
 
         // Handle different response formats
         let messages = result.result.messages || result.result;
         if (!Array.isArray(messages)) {
+            console.log('[OpenClaw] messages is not array, got:', typeof messages);
             messages = [];
         }
         
