@@ -4,124 +4,115 @@ Connect VS Code to your OpenClaw agent via Tailscale.
 
 ## Features
 
+- **Chat panel**: Full conversation history with your agent
 - **Right-click code actions**: Ask OpenClaw, Explain code, Fix code
-- **Inline chat panel**: Full conversation history with your agent
 - **Secure by design**: Only works on your Tailnet — no external exposure
-- **Full context**: Access to MEMORY.md, conversation history, your preferences
+- **Send messages**: Uses `openclaw agent` CLI for reliable delivery
 
 ## Installation
 
-### 1. Build the extension
+### 1. Prerequisites
+
+- **OpenClaw CLI** installed: `npm install -g openclaw`
+- **OpenClaw Gateway** running: `openclaw gateway start`
+- **Tailscale** connected (if accessing gateway remotely)
+
+### 2. Build and install the extension
 
 ```bash
-cd projects/openclaw-vscode
+git clone https://github.com/AdamNaghs/openclaw-vscode-extension.git
+cd openclaw-vscode-extension
 npm install
 npm run compile
-```
-
-### 2. Install in VS Code
-
-Option A: Development mode
-```bash
-code --extensionDevelopmentPath=/home/linuxbrew/.openclaw/workspace/projects/openclaw-vscode
-```
-
-Option B: Package and install
-```bash
-npm install -g @vscode/vsce
+npm install -g @vscode/vsce   # if not already installed
 vsce package
 code --install-extension openclaw-0.1.0.vsix
 ```
 
-## Configuration
+Or for development mode:
+```bash
+# Press F5 in VS Code with this folder open
+```
 
-Open VS Code settings and configure:
+### 3. Configure VS Code settings
+
+Open VS Code settings (Cmd+, or Ctrl+,) and search for "openclaw":
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| `openclaw.gatewayUrl` | Your OpenClaw Gateway Tailscale URL | `http://your-machine.tailnet-name.ts.net:18789` |
-| `openclaw.gatewayToken` | Your gateway authentication token | `sk-...` |
-| `openclaw.sessionKey` | Session to connect to | `main:main` |
+| `openclaw.gatewayUrl` | Your OpenClaw Gateway URL | `http://your-machine.tailnet.ts.net:18789` |
+| `openclaw.gatewayToken` | Gateway authentication token | (from `~/.openclaw/openclaw.json` → `gateway.auth.token`) |
+| `openclaw.sessionKey` | Session key | `agent:main:main` (default) |
 
-### Finding your settings:
+**Finding your gateway URL and token:**
+```bash
+# Gateway port (default 18789)
+cat ~/.openclaw/openclaw.json | grep -A2 '"gateway"'
 
-1. **Gateway URL**: Check your Tailscale admin console for your machine's Tailnet address. The Gateway runs on port `18789` by default.
-2. **Gateway Token**: Check your OpenClaw config (`~/.openclaw/openclaw.json`) for the token under `gateway.auth.token`
-3. **Tailscale requirement**: The extension will fail to connect if you're not on your Tailnet
+# Auth token
+cat ~/.openclaw/openclaw.json | python3 -c "import sys,json; print(json.load(sys.stdin)['gateway']['auth']['token'])"
+
+# If using Tailscale, get your machine's Tailnet hostname
+tailscale status
+```
 
 ## Usage
 
 ### Chat panel
-- Open Command Palette → "OpenClaw: Open OpenClaw"
-- Type messages and get responses from OpenClaw
+1. Open Command Palette (Cmd+Shift+P) → "OpenClaw: Open OpenClaw"
+2. Type messages in the input area and press Enter
+3. Messages are sent via `openclaw agent` CLI and responses appear via polling
 
 ### Right-click actions
 1. Select code in editor
-2. Right-click → "Ask OpenClaw" / "Explain this code" / "Fix issues"
+2. Right-click → "Ask OpenClaw" / "Explain this code" / "Fix issues in this code"
 
 ### Apply edits
-When OpenClaw suggests code changes, click "Apply Edit" to apply them directly to your file.
-
-## Security
-
-- **Tailnet-only**: Extension only connects via Tailscale — if you're not on the Tailnet, it fails closed
-- **Token auth**: All requests include your gateway token via `Authorization: Bearer` header
-- **No cloud**: Nothing leaves your infrastructure
-
-## Troubleshooting
-
-### "Cannot connect to OpenClaw gateway"
-- Check you're connected to Tailscale: `tailscale status`
-- Verify the gateway URL is correct (port 18789 by default)
-- Ensure OpenClaw gateway is running: `openclaw gateway status`
-
-### "Not configured"
-- Set `openclaw.gatewayUrl` and `openclaw.gatewayToken` in VS Code settings
+When OpenClaw suggests code in a code block, click "Apply Edit" to insert it into your active editor.
 
 ## Architecture
 
 ```
-VS Code Extension ←→ Tailscale network ←→ OpenClaw Gateway
-        ↓                                      |
-   HTTP POST /tools/invoke                     |
-        ↓                                      ↓
-   sessions_send tool                    Agent (main:main)
-   sessions_history tool                       |
-                                        MEMORY.md loaded
+VS Code Extension
+    |
+    |── HTTP /tools/invoke ──→ OpenClaw Gateway
+    |   (sessions_list)            (connection test)
+    |   (sessions_history)         (fetch messages, polling every 3s)
+    |
+    |── openclaw agent CLI ──→ Gateway WS RPC
+        (send messages)            (chat.send with device auth)
 ```
 
-The extension uses OpenClaw's HTTP `/tools/invoke` endpoint to:
-- Call `sessions_send` to send messages to your session
-- Call `sessions_history` to fetch conversation history
+**Reading messages**: Uses the HTTP `/tools/invoke` endpoint with bearer token auth to call `sessions_list` (connection test) and `sessions_history` (message polling).
 
-The extension polls for new messages every 2 seconds using `sessions_history`.
+**Sending messages**: Uses the `openclaw agent -m "..." --session-key "..."` CLI command, which handles WebSocket RPC with full device authentication automatically.
 
-## Correct API Usage (per OpenClaw docs)
+## Troubleshooting
 
-Based on the OpenClaw documentation:
+### "Cannot reach OpenClaw gateway"
+- Check gateway is running: `openclaw gateway status`
+- If remote: verify Tailscale is connected: `tailscale status`
+- Verify the URL and port in settings match your config
 
-```
-POST /tools/invoke
-Authorization: Bearer <token>
-Content-Type: application/json
+### "Not configured"
+- Set both `openclaw.gatewayUrl` and `openclaw.gatewayToken` in VS Code settings
 
-{
-  "tool": "sessions_send",
-  "args": {
-    "sessionKey": "main:main",
-    "message": "Your message here",
-    "timeoutSeconds": 0
-  },
-  "sessionKey": "main:main"
-}
-```
+### "openclaw CLI not found"
+- Install: `npm install -g openclaw`
+- Ensure it's in your PATH: `which openclaw`
+
+### No messages showing
+- Check your session key is correct (default: `agent:main:main`)
+- Verify the session exists: `openclaw sessions list`
+- Old configs may use `main:main` — update to `agent:main:main`
+
+### Messages appear but sending fails
+- The CLI must be installed and configured on the same machine as VS Code
+- Run `openclaw agent -m "test" --session-key agent:main:main` manually to verify
 
 ## Development
 
 ```bash
-# Watch mode
-npm run watch
-
-# Test in VS Code
-F5 (Run Extension)
+npm run watch     # Watch mode for TypeScript compilation
+# Press F5 in VS Code to launch Extension Development Host
 ```
