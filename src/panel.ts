@@ -405,10 +405,12 @@ export class OpenClawPanel {
         function formatContent(text) {
             if (typeof text !== "string") { text = String(text || ""); }
             var escaped = escapeHtml(text);
-            return escaped
-                .replace(/\`\`\`(\w+)?\n([\s\S]*?)\n\`\`\`/g, "<pre><code>$2</code></pre>")
-                .replace(/\`([^\`]+)\`/g, "<code>$1</code>")
-                .replace(/\n/g, "<br>");
+            var bt = String.fromCharCode(96);
+            // Replace code blocks: ```lang\ncode\n```
+            escaped = escaped.replace(new RegExp(bt + bt + bt + "(\\w+)?\\n([\\s\\S]*?)\\n" + bt + bt + bt, "g"), "<pre><code>$2</code></pre>");
+            // Replace inline code: `code`
+            escaped = escaped.replace(new RegExp(bt + "([^" + bt + "]+)" + bt, "g"), "<code>$1</code>");
+            return escaped.replace(/\n/g, "<br>");
         }
 
         function getCodeBlock(msgIdx) {
