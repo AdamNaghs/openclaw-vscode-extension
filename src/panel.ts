@@ -246,13 +246,13 @@ export class OpenClawPanel {
         <span class="status-text" id="statusText">Not connected</span>
     </div>
     <div class="toolbar">
-        <button onclick="insertFileRef()">+ File</button>
+        <button id="fileBtn">+ File</button>
     </div>
     <div id="errorBanner" class="error-banner" style="display: none;"></div>
     <div id="messages" class="messages"></div>
     <div class="input-area">
         <textarea id="messageInput" placeholder="Ask OpenClaw... Use @filename to include files (Shift+Enter for new line, Enter to send)"></textarea>
-        <button id="sendBtn" onclick="sendMessage()">Send</button>
+        <button id="sendBtn">Send</button>
     </div>
     <p class="hint">Tip: Type @filename to include file contents in your message</p>
     <script>
@@ -338,6 +338,9 @@ export class OpenClawPanel {
         document.getElementById("messageInput").addEventListener("keydown", (e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
         });
+
+        document.getElementById("sendBtn").addEventListener("click", sendMessage);
+        document.getElementById("fileBtn").addEventListener("click", insertFileRef);
 
         window.addEventListener("message", (e) => {
             const msg = e.data;
