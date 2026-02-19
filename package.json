@@ -1,0 +1,101 @@
+{
+  "name": "openclaw",
+  "displayName": "OpenClaw IDE",
+  "description": "Connect VS Code to your OpenClaw agent via Tailscale",
+  "version": "0.1.0",
+  "publisher": "openclaw",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Chat",
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:openclaw.openPanel"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "openclaw.openPanel",
+        "title": "Open OpenClaw",
+        "category": "OpenClaw"
+      },
+      {
+        "command": "openclaw.ask",
+        "title": "Ask OpenClaw",
+        "category": "OpenClaw"
+      },
+      {
+        "command": "openclaw.explain",
+        "title": "Explain this code",
+        "category": "OpenClaw"
+      },
+      {
+        "command": "openclaw.fix",
+        "title": "Fix issues in this code",
+        "category": "OpenClaw"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "openclaw.ask",
+          "group": "9_cutcopypaste@5",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "openclaw.explain",
+          "group": "9_cutcopypaste@6",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "openclaw.fix",
+          "group": "9_cutcopypaste@7",
+          "when": "editorHasSelection"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "openclawPanel",
+          "name": "OpenClaw",
+          "when": "openclaw.enabled"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "OpenClaw",
+      "properties": {
+        "openclaw.gatewayUrl": {
+          "type": "string",
+          "default": "",
+          "description": "OpenClaw Gateway URL (Tailscale address, e.g., http://your-machine.tailnet-name.ts.net:3000)"
+        },
+        "openclaw.gatewayToken": {
+          "type": "string",
+          "default": "",
+          "description": "OpenClaw Gateway Token"
+        },
+        "openclaw.sessionKey": {
+          "type": "string",
+          "default": "main:main",
+          "description": "Session key to connect to (default: main:main)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.x",
+    "@types/vscode": "^1.74.0",
+    "typescript": "^5.x"
+  }
+}
