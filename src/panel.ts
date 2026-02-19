@@ -414,7 +414,7 @@ export class OpenClawPanel {
         function getCodeBlock(msgIdx) {
             var msg = messages[msgIdx];
             if (!msg || msg.role !== "assistant") return null;
-            var match = (msg.content || "").match(/```([\s\S]*?)```/);
+            var match = (msg.content || "").match(/\`\`\`([\s\S]*?)\`\`\`/);
             return match ? match[1] : null;
         }
 
