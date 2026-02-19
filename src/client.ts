@@ -185,7 +185,12 @@ export class OpenClawClient {
             return [];
         }
 
-        const messages = result.result.messages || result.result || [];
+        // Handle different response formats
+        let messages = result.result.messages || result.result;
+        if (!Array.isArray(messages)) {
+            messages = [];
+        }
+        
         return messages.map((m: any) => ({
             role: m.role || 'assistant',
             content: m.content || m.text || '',
