@@ -418,7 +418,7 @@ export class OpenClawPanel {
                 // Remove language tag if present
                 var newlineIdx = code.indexOf("\\n");
                 if (newlineIdx !== -1 && newlineIdx < 20) {
-                    code = code.substring(newlineIdx + 2);
+                    code = code.substring(newlineIdx + 1);
                 }
                 escaped = escaped.substring(0, start) + "<pre><code>" + code + "</code></pre>" + escaped.substring(end + 3);
             }
@@ -431,7 +431,7 @@ export class OpenClawPanel {
                 var code = escaped.substring(start + 1, end);
                 escaped = escaped.substring(0, start) + "<code>" + code + "</code>" + escaped.substring(end + 1);
             }
-            return escaped.replace(/\n/g, "<br>");
+            return escaped.replace(/\\n/g, "<br>");
         }
 
         function getCodeBlock(msgIdx) {
@@ -445,7 +445,7 @@ export class OpenClawPanel {
             if (end === -1) return null;
             var code = content.substring(start + 3, end).trim();
             // Remove language tag if present on first line
-            var newlineIdx = code.indexOf("\n");
+            var newlineIdx = code.indexOf("\\n");
             if (newlineIdx !== -1) {
                 code = code.substring(newlineIdx + 1);
             }
