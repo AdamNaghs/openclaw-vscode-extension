@@ -379,7 +379,8 @@ export class OpenClawPanel {
                 var role = msg.role === "assistant" ? "assistant" : "user";
                 var name = msg.role === "assistant" ? "OpenClaw" : "You";
                 var content = formatContent(msg.content || "");
-                var hasCode = (msg.content || "").indexOf("\`\`\`") !== -1;
+                var triple = String.fromCharCode(96) + String.fromCharCode(96) + String.fromCharCode(96);
+                var hasCode = (msg.content || "").indexOf(triple) !== -1;
                 var actionsHtml = "";
                 if (msg.role === "assistant" && hasCode) {
                     actionsHtml = '<button class="apply-button" data-msg-idx="' + idx + '">Apply Edit</button>';
