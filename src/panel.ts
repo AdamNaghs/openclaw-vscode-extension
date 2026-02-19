@@ -414,8 +414,12 @@ export class OpenClawPanel {
         function getCodeBlock(msgIdx) {
             var msg = messages[msgIdx];
             if (!msg || msg.role !== "assistant") return null;
-            var match = (msg.content || "").match(new RegExp("\\x60\\x60\\x60([\\s\\S]*?)\\x60\\x60\\x60"));
-            return match ? match[1] : null;
+            var content = msg.content || "";
+            var start = content.indexOf("```");
+            if (start === -1) return null;
+            var end = content.indexOf("```", start + 3);
+            if (end === -1) return null;
+            return content.substring(start + 3, end).trim();
         }
 
         function applyEdit(idx) {
