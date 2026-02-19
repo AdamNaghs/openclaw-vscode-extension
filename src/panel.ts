@@ -415,9 +415,10 @@ export class OpenClawPanel {
             var msg = messages[msgIdx];
             if (!msg || msg.role !== "assistant") return null;
             var content = msg.content || "";
-            var start = content.indexOf("```");
+            var bt = String.fromCharCode(96);
+            var start = content.indexOf(bt + bt + bt);
             if (start === -1) return null;
-            var end = content.indexOf("```", start + 3);
+            var end = content.indexOf(bt + bt + bt, start + 3);
             if (end === -1) return null;
             return content.substring(start + 3, end).trim();
         }
