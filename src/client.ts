@@ -210,11 +210,8 @@ export class OpenClawClient {
     private execCliSend(message: string): Promise<string> {
         return new Promise((resolve, reject) => {
             const escaped = message.replace(/'/g, "'\\''");
-            // CLI expects --agent flag with agent name, not --session-id
-            // Extract from session key format: "agent:main:main" → "main"
-            const parts = this.sessionKey.split(':');
-            const agentName = parts.length >= 2 ? parts[1] : 'main';
-            const cmd = `openclaw agent -m '${escaped}' --agent '${agentName}' --timeout 0`;
+            // CLI uses --to which accepts session keys (agent:main:main) or agent names
+            const cmd = `openclaw agent -m '${escaped}' --to '${this.sessionKey}' --timeout 0`;
             execCb(cmd, { timeout: 15000 }, (err, stdout, stderr) => {
                 if (err) {
                     // Check if openclaw CLI is not found
