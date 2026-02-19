@@ -106,12 +106,18 @@ export class OpenClawClient {
 
         const data = await response.json() as any;
         
-        // Handle wrapped response format from gateway
-        // { content: [{type: 'text', text: '...'}], details: {...} }
+        // Handle gateway envelope: { ok: true, result: { ... } }
         let resultData = data;
-        if (data.content && Array.isArray(data.content)) {
-            // Try to parse the text content as JSON
-            const textContent = data.content.find((c: any) => c.type === 'text')?.text;
+        if (data && typeof data === 'object' && 'ok' in data) {
+            if (!data.ok) {
+                return { ok: false, error: data.error || 'Gateway error' };
+            }
+            resultData = data.result;
+        }
+        
+        // Handle MCP content format: { content: [{type: 'text', text: '...'}] }
+        if (resultData?.content && Array.isArray(resultData.content)) {
+            const textContent = resultData.content.find((c: any) => c.type === 'text')?.text;
             if (textContent) {
                 try {
                     resultData = JSON.parse(textContent);
@@ -122,14 +128,14 @@ export class OpenClawClient {
         }
         
         // Check for error in parsed data
-        if (resultData.status === 'error' || resultData.error) {
+        if (resultData?.status === 'error' || resultData?.error) {
             return { 
                 ok: false, 
                 error: resultData.error || 'Unknown error' 
             };
         }
         
-        return { ok: true, result: resultData.result || resultData };
+        return { ok: true, result: resultData };
     }
 
     async testConnection(): Promise<{ success: boolean; error?: string }> {
