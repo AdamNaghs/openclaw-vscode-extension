@@ -40,7 +40,7 @@ export class OpenClawClient {
         this.baseUrl = config.get<string>('gatewayUrl', '').replace(/\/$/, '');
         this.token = config.get<string>('gatewayToken', '');
         const rawKey = config.get<string>('sessionKey', 'agent:main:main');
-        // Normalise legacy "main:main" to "agent:main:main"
+        // Normalise legacy "main:main" to "agent:main:main" for HTTP calls
         this.sessionKey = rawKey === 'main:main' ? 'agent:main:main' : rawKey;
         this.connected = false;
     }
@@ -210,7 +210,9 @@ export class OpenClawClient {
     private execCliSend(message: string): Promise<string> {
         return new Promise((resolve, reject) => {
             const escaped = message.replace(/'/g, "'\\''");
-            const cmd = `openclaw agent -m '${escaped}' --session-id '${this.sessionKey}' --timeout 0`;
+            // CLI expects session ID without "agent:" prefix
+            const cliSessionId = this.sessionKey.replace(/^agent:/, '');
+            const cmd = `openclaw agent -m '${escaped}' --session-id '${cliSessionId}' --timeout 0`;
             execCb(cmd, { timeout: 15000 }, (err, stdout, stderr) => {
                 if (err) {
                     // Check if openclaw CLI is not found
