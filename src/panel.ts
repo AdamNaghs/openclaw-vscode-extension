@@ -406,10 +406,30 @@ export class OpenClawPanel {
             if (typeof text !== "string") { text = String(text || ""); }
             var escaped = escapeHtml(text);
             var bt = String.fromCharCode(96);
-            // Replace fenced code blocks (triple-backtick)
-            escaped = escaped.replace(new RegExp(bt + bt + bt + "(\\w+)?\\n([\\s\\S]*?)\\n" + bt + bt + bt, "g"), "<pre><code>$2</code></pre>");
-            // Replace inline code (single-backtick)
-            escaped = escaped.replace(new RegExp(bt + "([^" + bt + "]+)" + bt, "g"), "<code>$1</code>");
+            // Replace fenced code blocks (triple-backtick) - format: ```lang\ncode\n```
+            var triple = bt + bt + bt;
+            while (true) {
+                var start = escaped.indexOf(triple);
+                if (start === -1) break;
+                var end = escaped.indexOf(triple, start + 3);
+                if (end === -1) break;
+                var code = escaped.substring(start + 3, end);
+                // Remove language tag if present
+                var newlineIdx = code.indexOf("\\n");
+                if (newlineIdx !== -1 && newlineIdx < 20) {
+                    code = code.substring(newlineIdx + 2);
+                }
+                escaped = escaped.substring(0, start) + "<pre><code>" + code + "</code></pre>" + escaped.substring(end + 3);
+            }
+            // Replace inline code (single-backtick) - format: `code`
+            while (true) {
+                var start = escaped.indexOf(bt);
+                if (start === -1) break;
+                var end = escaped.indexOf(bt, start + 1);
+                if (end === -1) break;
+                var code = escaped.substring(start + 1, end);
+                escaped = escaped.substring(0, start) + "<code>" + code + "</code>" + escaped.substring(end + 1);
+            }
             return escaped.replace(/\n/g, "<br>");
         }
 
@@ -417,12 +437,18 @@ export class OpenClawPanel {
             var msg = messages[msgIdx];
             if (!msg || msg.role !== "assistant") return null;
             var content = msg.content || "";
-            var bt = String.fromCharCode(96);
-            var start = content.indexOf(bt + bt + bt);
+            var triple = String.fromCharCode(96) + String.fromCharCode(96) + String.fromCharCode(96);
+            var start = content.indexOf(triple);
             if (start === -1) return null;
-            var end = content.indexOf(bt + bt + bt, start + 3);
+            var end = content.indexOf(triple, start + 3);
             if (end === -1) return null;
-            return content.substring(start + 3, end).trim();
+            var code = content.substring(start + 3, end).trim();
+            // Remove language tag if present on first line
+            var newlineIdx = code.indexOf("\n");
+            if (newlineIdx !== -1) {
+                code = code.substring(newlineIdx + 1);
+            }
+            return code;
         }
 
         function applyEdit(idx) {
