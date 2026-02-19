@@ -104,16 +104,32 @@ export class OpenClawClient {
             })
         });
 
-        const data = await response.json() as { ok?: boolean; result?: any; error?: { message?: string } };
+        const data = await response.json() as any;
         
-        if (!response.ok || !data.ok) {
+        // Handle wrapped response format from gateway
+        // { content: [{type: 'text', text: '...'}], details: {...} }
+        let resultData = data;
+        if (data.content && Array.isArray(data.content)) {
+            // Try to parse the text content as JSON
+            const textContent = data.content.find((c: any) => c.type === 'text')?.text;
+            if (textContent) {
+                try {
+                    resultData = JSON.parse(textContent);
+                } catch {
+                    resultData = { result: textContent };
+                }
+            }
+        }
+        
+        // Check for error in parsed data
+        if (resultData.status === 'error' || resultData.error) {
             return { 
                 ok: false, 
-                error: data.error?.message || `HTTP ${response.status}` 
+                error: resultData.error || 'Unknown error' 
             };
         }
-
-        return { ok: true, result: data.result };
+        
+        return { ok: true, result: resultData.result || resultData };
     }
 
     async testConnection(): Promise<{ success: boolean; error?: string }> {
