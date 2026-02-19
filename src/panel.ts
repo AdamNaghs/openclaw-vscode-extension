@@ -406,9 +406,9 @@ export class OpenClawPanel {
             if (typeof text !== "string") { text = String(text || ""); }
             var escaped = escapeHtml(text);
             var bt = String.fromCharCode(96);
-            // Replace code blocks: ```lang\ncode\n```
+            // Replace fenced code blocks (triple-backtick)
             escaped = escaped.replace(new RegExp(bt + bt + bt + "(\\w+)?\\n([\\s\\S]*?)\\n" + bt + bt + bt, "g"), "<pre><code>$2</code></pre>");
-            // Replace inline code: `code`
+            // Replace inline code (single-backtick)
             escaped = escaped.replace(new RegExp(bt + "([^" + bt + "]+)" + bt, "g"), "<code>$1</code>");
             return escaped.replace(/\n/g, "<br>");
         }
